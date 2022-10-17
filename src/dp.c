@@ -2,6 +2,8 @@
 #include "conf.h"
 #include "storage.h"
 #include "server.h"
+#include <threads.h>
+#include <stdbool.h>
 
 
 int main(int argc, char **argv)
@@ -9,9 +11,10 @@ int main(int argc, char **argv)
     struct MainOpt opt;
     struct conf cnf;
     struct storage strg;
+    redisContext *srg;
     unsigned short i;
-    char *v_str;
-    long long val;
+    thrd_t threadID;
+    char value[1024];
 
     strg.host = "localhost";
     strg.port = 6379;
@@ -20,20 +23,21 @@ int main(int argc, char **argv)
 
     // open_conf(&cnf, opt.fname);
 
-    init_srorage(&strg);
+    init_srorage(&srg, &strg);
 
-    val = 1278446744;
+    if(thrd_success != thrd_create(&threadID, init_server, NULL))
+    {
+        printf("Thread start Error\n");
+        return 1;
+    }
 
+    while(true)
+    {
+        read_buffer(srg, "client:rq", value);
 
-    // for(i = 0; i < 10; i++)
-    // {
-    //     write(i);
-    // }
+        printf("%s\n", value);
+    }
 
-    // for(i = 0; i < 10; i++)
-    // {
-    //     read();
-    // }
-
-    init_server();
+    thrd_join(threadID, NULL);
+    return 0;
 }

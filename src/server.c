@@ -13,6 +13,7 @@
 
 #include "package.h"
 #include "storage.h"
+#include <threads.h>
 
 #define BUFLEN 512 // Max length of buffer
 #define PORT 8888  // The port on which to listen for incoming data
@@ -47,7 +48,7 @@ void req_handler(char *buf, int len){
 
 }
 
-void init_server(void)
+int init_server(void *t)
 {
     struct sockaddr_in s_in_addr;
     struct sockaddr_in s_out_addr;
@@ -57,6 +58,12 @@ void init_server(void)
     int result;
     int recv_len;
     char *json_dump;
+    PkgContext pkg;
+    redisContext *srg;
+
+    struct storage strg;
+    strg.host = "localhost";
+    strg.port = 6379;
 
     char buf[BUFLEN] = {0};
 
@@ -81,9 +88,10 @@ void init_server(void)
         die("bind");
     }
     
+    init_srorage(&srg, &strg);
+    
     while (1)
     {
-        fflush(stdout);
         memset(buf, 0, BUFLEN);
 
         recv_len = recvfrom(
@@ -96,10 +104,16 @@ void init_server(void)
             break;
         }
 
-        datagram_to_json(&json_dump, &s_out_addr, buf, recv_len);
+        init_package(&pkg);
 
-        write_json(json_dump);
+        datagram_to_json(&pkg, &s_out_addr, buf, recv_len);
+
+        write_buffer(srg, "client:rq", pkg.json_dump);
+
+        delete_package(&pkg);
     }
 
     close(s);
+
+    thrd_exit(0);
 }

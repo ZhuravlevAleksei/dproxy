@@ -9,10 +9,9 @@ struct storage
     unsigned short port;
 };
 
-void init_srorage(struct storage *conf);
-// void write(unsigned short value);
-void write_json(char *value);
-// void read();
+void init_srorage(redisContext **context, struct storage *conf);
+void write_buffer(redisContext *context, const char *key, char *value);
+void read_buffer(redisContext *context, const char *key, char *value);
 
 
 #endif /* #ifndef STORAGE_H */

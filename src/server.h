@@ -1,6 +1,6 @@
 #ifndef SERVER_H
 #define SERVER_H
 
-void init_server(void);
+int init_server(void *t);
 
 #endif /* #ifndef SERVER_H */

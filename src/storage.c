@@ -1,21 +1,20 @@
 #include "storage.h"
 #include <stdio.h>
 
-static redisContext *context;
-
-void init_srorage(struct storage *conf)
+void init_srorage(redisContext **context, struct storage *conf)
 {
     redisReply *reply;
+    redisContext *cntxt;
 
     printf("Storage config %s:%u\n", conf->host, conf->port);
 
-    context = redisConnect(conf->host, conf->port);
+    cntxt = redisConnect(conf->host, conf->port);
 
-    if (context == NULL || context->err)
+    if (cntxt == NULL || cntxt->err)
     {
-        if (context)
+        if (cntxt)
         {
-            printf("Storage Error: %s\n", context->errstr);
+            printf("Storage Error: %s\n", cntxt->errstr);
             // handle error
         }
         else
@@ -26,49 +25,43 @@ void init_srorage(struct storage *conf)
         return;
     }
 
-    reply = redisCommand(context, "PING");
+    reply = redisCommand(cntxt, "PING");
 
     if(reply == NULL)
     {
-        printf("Storage Error: %s\n", context->errstr);
+        printf("Storage Error: %s\n", cntxt->errstr);
     }
 
     if(reply->type != REDIS_REPLY_STATUS)
     {
-        printf("Storage Error: %s\n", context->errstr);
+        printf("Storage Error: %s\n", cntxt->errstr);
     }else
     {
         printf("Storage PING was %s\n", reply->str);
     }
 
     freeReplyObject(reply);
+
+    *context = cntxt;
 }
 
-void write_json(char *value)
+void write_buffer(redisContext *context, const char *key, char *value)
 {
     redisReply *reply;
 
-    reply = redisCommand(context, "LPUSH clientrec:queue:ns %s", value);
+    reply = redisCommand(context, "LPUSH %s %s", key, value);
     freeReplyObject(reply);
 }
 
-// void write(unsigned short value)
-// {
-//     redisReply *reply;
+void read_buffer(redisContext *context, const char *key, char *value)
+{
+    redisReply *reply;
 
-//     reply = redisCommand(context, "LPUSH clientrec:queue:ns %u", value);
-//     freeReplyObject(reply);
-// }
+    reply = redisCommand(context, "BLPOP %s 0", key);
 
-// void read()
-// {
-//     redisReply *reply;
-//     unsigned short out;
+    if (reply->type == REDIS_REPLY_ARRAY) {
+        sprintf(value, "%s", reply->element[1]->str);
+    }
 
-//     reply = redisCommand(context, "RPOP clientrec:queue:ns");
-
-//     printf("%s\n", reply->str);
-
-//     freeReplyObject(reply);
-// }
-
+    freeReplyObject(reply);
+}
