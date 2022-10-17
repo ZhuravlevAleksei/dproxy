@@ -4,6 +4,7 @@
 #include "server.h"
 #include <threads.h>
 #include <stdbool.h>
+#include "filter.h"
 
 
 int main(int argc, char **argv)
@@ -22,6 +23,8 @@ int main(int argc, char **argv)
     get_main_options(&opt);
 
     // open_conf(&cnf, opt.fname);
+
+    filter_test();
 
     init_srorage(&srg, &strg);
 
