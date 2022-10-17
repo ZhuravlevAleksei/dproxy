@@ -108,7 +108,7 @@ int init_server(void *t)
 
         datagram_to_json(&pkg, &s_out_addr, buf, recv_len);
 
-        write_buffer(srg, "client:rq", pkg.json_dump);
+        write_buffer(srg, CLIENT_COMM_BUFFER_IN, pkg.json_dump);
 
         delete_package(&pkg);
     }

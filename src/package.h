@@ -4,6 +4,8 @@
 #include <netinet/in.h>
 #include <cJSON.h>
 
+#define LIST_QUERIES_KEY "queries"
+
 typedef struct
 {
     cJSON *datagram;

@@ -3,8 +3,13 @@
 #include <stdio.h>
 #include <string.h>
 #include "oniguruma.h"
+#include <cJSON.h>
+#include "package.h"
+#include <stdlib.h>
 
 #define ARRAY_FILTER_KEY "queries"
+
+static cJSON *datagram_json;
 
 void filter_test()
 {
@@ -67,13 +72,54 @@ void filter_test()
     onig_end();
 }
 
-// void (char *packet, char *stop_name)
-// {
-//     for()
-//     {
+unsigned char get_names_list(char **name_list, char *packet)
+{
+    unsigned char queries_array_len;
+    unsigned char names_len = 0;
+    const char *error_ptr;
+    const cJSON *queries_arr = NULL;
+    const cJSON *query_ns = NULL;
+    cJSON *name;
 
-//     }
-// }
+    datagram_json = cJSON_Parse(packet);
 
-// {"addr":0,"port":0,"transaction":9356,"flags":256,"questions":1,"answer":0,"authority":0,"additional":0,"queries":[
-//     {"name":"github.com","type":1,"class":1}]}
+    if(datagram_json == NULL)
+    {
+        error_ptr = cJSON_GetErrorPtr();
+
+        if (error_ptr != NULL)
+        {
+            printf("Error before: %s\n", error_ptr);
+        }
+
+        cJSON_Delete(datagram_json);
+        return names_len;
+    }
+
+    queries_arr = cJSON_GetObjectItemCaseSensitive(datagram_json, LIST_QUERIES_KEY);
+
+    queries_array_len = cJSON_GetArraySize(queries_arr);
+
+    *name_list = malloc(queries_array_len * sizeof(char));
+
+    cJSON_ArrayForEach(query_ns, queries_arr)
+    {
+        name = cJSON_GetObjectItemCaseSensitive(query_ns, "name");
+
+        if (!cJSON_IsString(name))
+        {
+            continue;;
+        }
+
+        *(name_list + names_len) = name->valuestring;
+
+        names_len++;
+    }
+
+    return names_len;
+}
+
+void clear_filter()
+{
+    cJSON_Delete(datagram_json);
+}

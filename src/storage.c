@@ -53,6 +53,14 @@ void write_buffer(redisContext *context, const char *key, char *value)
     freeReplyObject(reply);
 }
 
+void write_set(redisContext *context, const char *collection, char *value)
+{
+    redisReply *reply;
+
+    reply = redisCommand(context, "SADD %s %s", collection, value);
+    freeReplyObject(reply);
+}
+
 void read_buffer(redisContext *context, const char *key, char *value)
 {
     redisReply *reply;
@@ -64,4 +72,24 @@ void read_buffer(redisContext *context, const char *key, char *value)
     }
 
     freeReplyObject(reply);
+}
+
+bool check_in_set(redisContext *context, const char *collection, char *value)
+{
+    redisReply *reply;
+    bool res;
+
+    reply = redisCommand(context, "SISMEMBER %s %s", collection, value);
+
+    if(reply->integer == 1)
+    {
+        res = true;
+    }else
+    {
+        res = false;
+    }
+
+    freeReplyObject(reply);
+
+    return res;
 }

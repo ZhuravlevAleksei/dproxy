@@ -53,7 +53,7 @@ cJSON *create_queries_json(PkgContext *context)
         return j_arr;
     }
 
-    cJSON_AddItemToObject(context->datagram, "queries", j_arr);
+    cJSON_AddItemToObject(context->datagram, LIST_QUERIES_KEY, j_arr);
 
     return j_arr;
 }
