@@ -1,15 +1,20 @@
 #include "package.h"
 
-#include <arpa/nameser.h>
+// #include <arpa/nameser.h>
+#include <arpa/inet.h> //inet_addr , inet_ntoa , ntohs etc
+#include <netinet/in.h>
+#include <unistd.h> //getpid
+
+#include <resolv.h>
 
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-
-typedef enum {
-	ns_transaction = 0,
-	ns_flags = 2,
+typedef enum
+{
+    ns_transaction = 0,
+    ns_flags = 2,
     ns_questions = 4,
     ns_answer = 6,
     ns_authority = 8,
@@ -20,6 +25,11 @@ void init_package(PkgContext *context)
 {
     context->datagram = cJSON_CreateObject();
 }
+
+// void init_datagram(PkgContext *context)
+// {
+//     context->datagram_json = cJSON_Parse(packet);
+// }
 
 void delete_package(PkgContext *context)
 {
@@ -75,7 +85,7 @@ void create_string_json(cJSON *j_obj, const char *key, const char *value)
 
 unsigned short _msg_parse(const unsigned char *p_msg, NsSectDisp disp)
 {
-    return ntohs(*((u_int16_t*)(p_msg + disp)));
+    return ntohs(*((u_int16_t *)(p_msg + disp)));
 }
 
 void questions_to_json(cJSON *j_arr, unsigned short q_number, ns_rr *rr)
@@ -115,7 +125,7 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
 
     result = ns_initparse(buf, buf_len, &msg);
 
-    if(result == -1)
+    if (result == -1)
     {
         printf("ns_initparse");
         return;
@@ -132,11 +142,11 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
 
     j_queries = create_queries_json(context);
 
-    for(i = 0; i < msg_count; i++)
+    for (i = 0; i < msg_count; i++)
     {
-        result =  ns_parserr(&msg, ns_s_qd, i, &rr);
+        result = ns_parserr(&msg, ns_s_qd, i, &rr);
 
-        if(result < 0)
+        if (result < 0)
         {
             printf("ns_parserr error");
             return;
@@ -146,7 +156,7 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
 
         result = ns_skiprr(msg._msg_ptr, msg._eom, ns_s_qd, 1);
 
-        if(result < 0)
+        if (result < 0)
         {
             break;
         }
@@ -157,7 +167,86 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
     context->json_dump = cJSON_PrintUnformatted(context->datagram);
 }
 
-void pack_to_datagram()
+struct DNS_HEADER
 {
-    
+    unsigned short id; // identification number
+
+    unsigned short flags;
+
+    unsigned short q_count;    // number of question entries
+    unsigned short ans_count;  // number of answer entries
+    unsigned short auth_count; // number of authority entries
+    unsigned short add_count;  // number of resource entries
+};
+
+struct QUESTION
+{
+    unsigned short qtype;
+    unsigned short qclass;
+};
+
+void ChangetoDnsNameFormat(unsigned char *dns, unsigned char *host)
+{
+    int lock = 0, i;
+    strcat((char *)host, ".");
+
+    for (i = 0; i < strlen((char *)host); i++)
+    {
+        if (host[i] == '.')
+        {
+            *dns++ = i - lock;
+            for (; lock < i; lock++)
+            {
+                *dns++ = host[lock];
+            }
+            lock++;
+        }
+    }
+    *dns++ = '\0';
+}
+
+int json_to_question(unsigned char *qinfo, cJSON *j_info)
+{
+    int len = 0;
+    unsigned char hostname[100];
+
+    sprintf(hostname, "yandex.ru");
+    ChangetoDnsNameFormat(qinfo, hostname);
+
+    len += strlen((const char *)qinfo) + 1;
+    qinfo += len;
+
+    *((unsigned short *)qinfo) = htons(T_A); // type
+    qinfo += sizeof(unsigned short);
+
+    *((unsigned short *)qinfo) = htons(1); // class
+
+    return len += 4;
+}
+
+void json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf_len)
+{
+    cJSON *datagram_json = cJSON_Parse(packet);
+
+    struct DNS_HEADER *dns = NULL;
+    struct QUESTION *qinfo = NULL;
+    unsigned char *qname;
+    int len = 0;
+
+    dns = (struct DNS_HEADER *)resolv;
+
+    dns->id = (unsigned short)htons(getpid());
+
+    dns->flags = htons(0x0100);
+
+    dns->q_count = htons(1);
+    dns->ans_count = 0;
+    dns->auth_count = 0;
+    dns->add_count = 0;
+
+    // pointer of the query
+    *res_len = sizeof(struct DNS_HEADER);
+    qname = resolv + *res_len;
+
+    *res_len += json_to_question(qname, NULL);
 }

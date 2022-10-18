@@ -26,6 +26,7 @@ set(SRC_FILES
     server.c
     package.c
     filter.c
+    client.c
 )
 
 foreach(FILE ${SRC_FILES})

@@ -73,6 +73,7 @@ int init_server(void *t)
     if (s == -1)
     {
         die("socket");
+        thrd_exit(1);
     }
 
     memset((char *)&s_in_addr, 0, sizeof(s_in_addr));
@@ -86,6 +87,7 @@ int init_server(void *t)
     if (result == -1)
     {
         die("bind");
+        thrd_exit(1);
     }
     
     init_srorage(&srg, &strg);
@@ -101,7 +103,8 @@ int init_server(void *t)
         if (recv_len == -1)
         {
             die("recvfrom");
-            break;
+            close(s);
+            thrd_exit(0);
         }
 
         init_package(&pkg);
