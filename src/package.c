@@ -10,6 +10,15 @@
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdbool.h>
+
+static const char *query_json_keys[] = {
+    "flags",
+    "questions",
+    "answer",
+    "authority",
+    "additional"
+};
 
 typedef enum
 {
@@ -20,6 +29,8 @@ typedef enum
     ns_authority = 8,
     ns_additional = 10
 } NsSectDisp;
+
+bool str_to_register(unsigned short *reg, const cJSON *json, const char *key);
 
 void init_package(PkgContext *context)
 {
@@ -205,48 +216,117 @@ void ChangetoDnsNameFormat(unsigned char *dns, unsigned char *host)
     *dns++ = '\0';
 }
 
-int json_to_question(unsigned char *qinfo, cJSON *j_info)
+unsigned short json_to_question(unsigned char *qinfo, const cJSON *j_info_array)
 {
-    int len = 0;
-    unsigned char hostname[100];
+    unsigned short len = 0;
+    unsigned short tmp;
+    const cJSON *j_info;
+    const cJSON *j_item;
 
-    sprintf(hostname, "yandex.ru");
-    ChangetoDnsNameFormat(qinfo, hostname);
+    j_item = cJSON_GetArrayItem(j_info_array, 0);
+
+    j_info = cJSON_GetObjectItemCaseSensitive(j_item, "name");
+
+    if ((j_info == NULL) || (!cJSON_IsString(j_info)))
+    {
+        fprintf(stderr, "json_to_question:cJSON_GetArrayItem error: 'name'\n");
+        return 0;
+    }
+
+    ChangetoDnsNameFormat(qinfo, j_info->valuestring);
 
     len += strlen((const char *)qinfo) + 1;
     qinfo += len;
 
-    *((unsigned short *)qinfo) = htons(T_A); // type
+    j_info = cJSON_GetObjectItemCaseSensitive(j_item, "type");
+
+    if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
+    {
+        fprintf(stderr, "str_to_register error: 'type'\n");
+        return 0;
+    }
+    *((unsigned short *)qinfo) = htons(j_info->valueint);
+
     qinfo += sizeof(unsigned short);
 
-    *((unsigned short *)qinfo) = htons(1); // class
+    j_info = cJSON_GetObjectItemCaseSensitive(j_item, "class");
+
+    if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
+    {
+        fprintf(stderr, "str_to_register error: 'class'\n");
+        return 0;
+    }
+    *((unsigned short *)qinfo) = htons(j_info->valueint);
 
     return len += 4;
+}
+
+bool str_to_register(unsigned short *reg, const cJSON *json, const char *key)
+{
+    const cJSON *j_int = cJSON_GetObjectItemCaseSensitive(json, key);
+
+    if (cJSON_IsNumber(j_int) && (j_int != NULL))
+    {
+        *reg = j_int->valueint;
+        return true;
+    }
+
+    return false;
 }
 
 void json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf_len)
 {
     cJSON *datagram_json = cJSON_Parse(packet);
+    const cJSON *j_string = NULL;
+    const cJSON *j_arr = NULL;
 
     struct DNS_HEADER *dns = NULL;
     struct QUESTION *qinfo = NULL;
     unsigned char *qname;
+    unsigned short tmp;
+    int i;
     int len = 0;
+
+    if (datagram_json == NULL)
+    {
+        const char *error_ptr = cJSON_GetErrorPtr();
+        if (error_ptr != NULL)
+        {
+            fprintf(stderr, "Error before: %s\n", error_ptr);
+        }
+        return;
+    }
 
     dns = (struct DNS_HEADER *)resolv;
 
     dns->id = (unsigned short)htons(getpid());
 
-    dns->flags = htons(0x0100);
+    unsigned short *reg_ptr = &(dns->flags);
 
-    dns->q_count = htons(1);
-    dns->ans_count = 0;
-    dns->auth_count = 0;
-    dns->add_count = 0;
+    for (i = 0; i < (sizeof(query_json_keys)/sizeof(const char *)); i++)
+    {
+        if (!str_to_register(&tmp, datagram_json, query_json_keys[i]))
+        {
+            fprintf(stderr, "str_to_register error: '%s'\n", query_json_keys[i]);
+            *res_len = 0;
+            return;
+        }
+        *(reg_ptr + i) = htons(tmp);
+    }
 
     // pointer of the query
     *res_len = sizeof(struct DNS_HEADER);
     qname = resolv + *res_len;
 
-    *res_len += json_to_question(qname, NULL);
+    j_arr = cJSON_GetObjectItemCaseSensitive(datagram_json, LIST_QUERIES_KEY);
+
+    tmp = json_to_question(qname, j_arr);
+
+    if(tmp == 0)
+    {
+        *res_len = 0;
+        return;
+    }
+
+    *res_len += tmp;
 }
