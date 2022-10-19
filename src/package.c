@@ -361,6 +361,13 @@ bool json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf
     
     j_string = cJSON_GetObjectItemCaseSensitive(datagram_json, "add_section");
 
+    if(j_string == NULL || j_string->valuestring == NULL)
+    {
+        *res_len = 0;
+        cJSON_Delete(datagram_json);
+        return false;
+    }
+
     if (cJSON_IsString(j_string) && (j_string->valuestring != NULL))
     {
         for(i = 0; i < strlen(j_string->valuestring); i+=2)
