@@ -45,15 +45,12 @@ int main(int argc, char **argv)
         printf("Thread init_client start Error\n");
         return 1;
     }
-    // init_client((void*)buf);
 
     while(true)
     {
         read_buffer(srg, CLIENT_COMM_BUFFER_IN, value);
 
         names_len = get_names_list(&name_list, value);
-
-        // json_to_datagram(value, buf, &recv_len, 65535);
 
         for(n = 0; n < names_len; n++)
         {

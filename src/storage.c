@@ -74,6 +74,29 @@ void read_buffer(redisContext *context, const char *key, char *value)
     freeReplyObject(reply);
 }
 
+bool read_buffer_non_blocking(redisContext *context, const char *key, char *value)
+{
+    redisReply *reply;
+
+    reply = redisCommand(context, "LLEN %s", key);
+
+    if(reply->integer == 0)
+    {
+        freeReplyObject(reply);
+        return false;
+    }
+    freeReplyObject(reply);
+
+    reply = redisCommand(context, "LPOP %s", key);
+
+    if (reply->type == REDIS_REPLY_STRING) {
+        sprintf(value, "%s", reply->str);
+    }
+
+    freeReplyObject(reply);
+    return true;
+}
+
 bool check_in_set(redisContext *context, const char *collection, char *value)
 {
     redisReply *reply;

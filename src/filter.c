@@ -92,7 +92,6 @@ unsigned char get_names_list(char **name_list, char *packet)
             printf("Error before: %s\n", error_ptr);
         }
 
-        cJSON_Delete(datagram_json);
         return names_len;
     }
 
