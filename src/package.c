@@ -183,7 +183,7 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
 
     if (byte_counter < buf_len)
     {
-        msg_ptr = (unsigned char *)(msg._msg + (buf_len - byte_counter));
+        msg_ptr = (unsigned char *)(msg._msg + byte_counter);
 
         byte_counter = buf_len - byte_counter;
 
