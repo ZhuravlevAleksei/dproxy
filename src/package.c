@@ -1,7 +1,7 @@
 #include "package.h"
 
 #include <arpa/inet.h>
-#include <netinet/in.h>
+// #include <netinet/in.h>
 #include <unistd.h>
 
 #include <resolv.h>
@@ -11,13 +11,16 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#define NS_ANSWER_TTL 60
+#define NS_ANSWER_NAME_LOCATION 0xC00C
+#define NS_ANSWER_LINGTH 16
+
 static const char *query_json_keys[] = {
     "flags",
     "questions",
     "answer",
     "authority",
-    "additional"
-};
+    "additional"};
 
 typedef enum
 {
@@ -155,7 +158,7 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
     byte_counter += 12;
 
     j_queries = create_queries_json(context);
-    
+
     for (i = 0; i < msg_count; i++)
     {
         result = ns_parserr(&msg, ns_s_qd, i, &rr);
@@ -178,20 +181,20 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
         msg._msg_ptr += result;
     }
 
-    if(byte_counter < buf_len)
+    if (byte_counter < buf_len)
     {
-        msg_ptr = (unsigned char*)(msg._msg + 4 + (buf_len - byte_counter));
+        msg_ptr = (unsigned char *)(msg._msg + (buf_len - byte_counter));
 
         byte_counter = buf_len - byte_counter;
 
         add_section = calloc((byte_counter * 2) + 1, sizeof(char));
 
-        for(i = 0; i < byte_counter; i++)
+        for (i = 0; i < byte_counter; i++)
         {
             sprintf((add_section + (i * 2)), "%02x", *(msg_ptr++));
         }
 
-        if(cJSON_AddStringToObject(context->datagram, "add_section", add_section) == NULL)
+        if (cJSON_AddStringToObject(context->datagram, "add_section", add_section) == NULL)
         {
             printf("Additioanal section error");
             free(add_section);
@@ -214,6 +217,13 @@ struct DNS_HEADER
     unsigned short ans_count;
     unsigned short auth_count;
     unsigned short add_count;
+};
+
+struct DNS_QUESTION
+{
+    char *qname;
+    unsigned short qtype;
+    unsigned short qclass;
 };
 
 struct QUESTION
@@ -284,6 +294,7 @@ unsigned short json_to_question(unsigned char *qinfo, const cJSON *j_info_array)
     }
     *((unsigned short *)qinfo) = htons(j_info->valueint);
 
+    qinfo += sizeof(unsigned short);
     return len += 4;
 }
 
@@ -329,7 +340,7 @@ bool json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf
 
     unsigned short *reg_ptr = &(dns->flags);
 
-    for (i = 0; i < (sizeof(query_json_keys)/sizeof(const char *)); i++)
+    for (i = 0; i < (sizeof(query_json_keys) / sizeof(const char *)); i++)
     {
         if (!str_to_register(&tmp, datagram_json, query_json_keys[i]))
         {
@@ -349,7 +360,7 @@ bool json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf
 
     tmp = json_to_question(qname, j_arr);
 
-    if(tmp == 0)
+    if (tmp == 0)
     {
         *res_len = 0;
         cJSON_Delete(datagram_json);
@@ -358,10 +369,10 @@ bool json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf
 
     *res_len += tmp;
     qname = qname + tmp;
-    
+
     j_string = cJSON_GetObjectItemCaseSensitive(datagram_json, "add_section");
 
-    if(j_string == NULL || j_string->valuestring == NULL)
+    if (j_string == NULL || j_string->valuestring == NULL)
     {
         *res_len = 0;
         cJSON_Delete(datagram_json);
@@ -370,12 +381,12 @@ bool json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf
 
     if (cJSON_IsString(j_string) && (j_string->valuestring != NULL))
     {
-        for(i = 0; i < strlen(j_string->valuestring); i+=2)
+        for (i = 0; i < strlen(j_string->valuestring); i += 2)
         {
             test_str[0] = *(j_string->valuestring + i);
             test_str[1] = *(j_string->valuestring + (i + 1));
 
-            if(sscanf(test_str, "%hhx", qname+i/2) != 1)
+            if (sscanf(test_str, "%hhx", qname + i / 2) != 1)
             {
                 cJSON_Delete(datagram_json);
                 *res_len = 0;
@@ -411,31 +422,31 @@ bool json_to_response(
 
     *out_host = (unsigned long)j_int->valuedouble;
 
-    if(!str_to_register(out_port, datagram_json, "port"))
+    if (!str_to_register(out_port, datagram_json, "port"))
     {
         cJSON_Delete(datagram_json);
         return false;
     }
 
-    if(!str_to_register(&out_transaction, datagram_json, "transaction"))
+    if (!str_to_register(&out_transaction, datagram_json, "transaction"))
     {
         cJSON_Delete(datagram_json);
         return false;
     }
 
     j_string = cJSON_GetObjectItemCaseSensitive(datagram_json, "datagram");
-    if(!cJSON_IsString(j_string) || (j_string->valuestring == NULL))
+    if (!cJSON_IsString(j_string) || (j_string->valuestring == NULL))
     {
         cJSON_Delete(datagram_json);
         return false;
     }
 
-    for(i = 0; i < strlen(j_string->valuestring); i+=2)
+    for (i = 0; i < strlen(j_string->valuestring); i += 2)
     {
         test_str[0] = *(j_string->valuestring + i);
         test_str[1] = *(j_string->valuestring + (i + 1));
 
-        if(sscanf(test_str, "%hhx", buf+i/2) != 1)
+        if (sscanf(test_str, "%hhx", buf + i / 2) != 1)
         {
             cJSON_Delete(datagram_json);
             return false;
@@ -444,7 +455,7 @@ bool json_to_response(
 
     *buf_len = strlen(j_string->valuestring) / 2;
 
-    *((unsigned short*)buf) = htons(out_transaction);
+    *((unsigned short *)buf) = htons(out_transaction);
 
     cJSON_Delete(datagram_json);
     return true;
@@ -457,25 +468,25 @@ bool response_to_json(
     char *string = NULL;
     cJSON *response_json = cJSON_CreateObject();
 
-    if(cJSON_AddNumberToObject(response_json, "addr", out_host) == NULL)
+    if (cJSON_AddNumberToObject(response_json, "addr", out_host) == NULL)
     {
         cJSON_Delete(response_json);
         return false;
     }
 
-    if(cJSON_AddNumberToObject(response_json, "port", out_port) == NULL)
+    if (cJSON_AddNumberToObject(response_json, "port", out_port) == NULL)
     {
         cJSON_Delete(response_json);
         return false;
     }
 
-    if(cJSON_AddNumberToObject(response_json, "transaction", out_transaction) == NULL)
+    if (cJSON_AddNumberToObject(response_json, "transaction", out_transaction) == NULL)
     {
         cJSON_Delete(response_json);
         return false;
     }
 
-    if(cJSON_AddStringToObject(response_json, "datagram", message) == NULL)
+    if (cJSON_AddStringToObject(response_json, "datagram", message) == NULL)
     {
         cJSON_Delete(response_json);
         return false;
@@ -487,42 +498,223 @@ bool response_to_json(
     return true;
 }
 
+bool get_j_long(unsigned long *value, const char *key, cJSON *datagram_json)
+{
+    cJSON *j_info;
+
+    j_info = cJSON_GetObjectItemCaseSensitive(datagram_json, key);
+
+    if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
+    {
+        fprintf(stderr, "get_j_long error: '%s'\n", key);
+        return false;
+    }
+    *value = j_info->valuedouble;
+
+    return true;
+}
+
+bool get_j_short(unsigned short *value, const char *key, cJSON *datagram_json)
+{
+    cJSON *j_info;
+
+    j_info = cJSON_GetObjectItemCaseSensitive(datagram_json, key);
+
+    if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
+    {
+        fprintf(stderr, "get_j_short error: '%s'\n", key);
+        return false;
+    }
+    *value = j_info->valueint;
+
+    return true;
+}
+
 bool json_get_addr(
     char *packet, unsigned long *addr, unsigned short *port, unsigned short *transaction)
 {
     cJSON *datagram_json = cJSON_Parse(packet);
     cJSON *j_info;
 
-    j_info = cJSON_GetObjectItemCaseSensitive(datagram_json, "addr");
-
-    if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
+    if (!get_j_long(addr, "addr", datagram_json))
     {
-        fprintf(stderr, "json_get_addr error: 'addr'\n");
         cJSON_Delete(datagram_json);
         return 0;
     }
-    *addr = j_info->valuedouble;
 
-    j_info = cJSON_GetObjectItemCaseSensitive(datagram_json, "port");
-
-    if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
+    if (!get_j_short(port, "port", datagram_json))
     {
-        fprintf(stderr, "json_get_addr error: 'port'\n");
         cJSON_Delete(datagram_json);
         return 0;
     }
-    *port = j_info->valueint;
 
-    j_info = cJSON_GetObjectItemCaseSensitive(datagram_json, "transaction");
-
-    if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
+    if (!get_j_short(transaction, "transaction", datagram_json))
     {
-        fprintf(stderr, "json_get_addr error: 'transaction'\n");
         cJSON_Delete(datagram_json);
         return 0;
     }
-    *transaction = j_info->valueint;
 
     cJSON_Delete(datagram_json);
     return true;
+}
+
+int build_answer_dns(unsigned char *buf, unsigned long addr)
+{
+    *((unsigned short*)(buf + 0)) = htons(NS_ANSWER_NAME_LOCATION);
+
+    *((unsigned short*)(buf + 2)) = htons(ns_t_a);
+
+    *((unsigned short*)(buf + 4)) = htons(ns_c_in);
+
+    *((unsigned long*)(buf + 6)) = htonl(NS_ANSWER_TTL);
+
+    *((unsigned short*)(buf + 10)) = htons(4);
+
+    *((unsigned long*)(buf + 12)) = addr;
+
+    return NS_ANSWER_LINGTH;
+}
+
+void build_resp_header(
+    unsigned char *buf, unsigned short transaction, unsigned long answ_addr)
+{
+    struct DNS_HEADER *h_dns = (struct DNS_HEADER *)buf;
+
+    h_dns->id = (unsigned short)htons(transaction);
+
+    if (answ_addr != 0)
+    {
+        h_dns->flags = htons(0x8000); // NXDomain (3) & Message is a response
+        h_dns->ans_count = htons(0x0001);
+    }
+    else
+    {
+        h_dns->flags = htons(0x0003); // NXDomain=3 nameser.h ns_r_nxdomain
+        h_dns->ans_count = 0x0000;
+    }
+
+    h_dns->q_count = htons(0x0001);
+    h_dns->auth_count = 0x0000;
+    h_dns->add_count = 0x0000;
+}
+
+void bytes_to_hex(char *dst, unsigned char *src, int src_len)
+{
+    int i;
+
+    for (i = 0; i < src_len; i++)
+    {
+        sprintf((dst + (i * 2)), "%02x", *(src + i));
+    }
+    *(dst + (src_len * 2)) = 0;
+}
+
+bool build_response_packet(
+    char *json_str_buf, unsigned char *datagram_resp_buf, int datagram_len, char *packet)
+{
+    unsigned short resp_port;
+    unsigned long resp_addr;
+    unsigned short transaction;
+    char *message;
+
+    cJSON *datagram_json = cJSON_Parse(packet);
+    if (datagram_json == NULL)
+    {
+        fprintf(stderr, "build_response_packet:cJSON_Parse packet error\n");
+        return false;
+    }
+
+    if (!get_j_long(&resp_addr, "addr", datagram_json))
+    {
+        fprintf(stderr, "build_response_packet:get_j_long 'addr' error\n");
+        cJSON_Delete(datagram_json);
+        return false;
+    }
+
+    if (!get_j_short(&resp_port, "port", datagram_json))
+    {
+        fprintf(stderr, "build_response_packet:get_j_short 'port' error\n");
+        cJSON_Delete(datagram_json);
+        return false;
+    }
+
+    if (!get_j_short(&transaction, "transaction", datagram_json))
+    {
+        fprintf(stderr, "build_response_packet:get_j_short 'transaction' error\n");
+        cJSON_Delete(datagram_json);
+        return false;
+    }
+
+    cJSON_Delete(datagram_json);
+
+    message = calloc(((datagram_len * 2) + 1), sizeof(char));
+    if (message == NULL)
+    {
+        fprintf(stderr, "filter response:calloc(%u) error\n", datagram_len);
+        return false;
+    }
+    // There's two symbols per byte ((datagram_len * 2) + 1)
+    bytes_to_hex(message, datagram_resp_buf, datagram_len);
+
+    response_to_json(json_str_buf, resp_addr, resp_port, transaction, message);
+
+    free(message);
+    return true;
+}
+
+int build_response_datagram(
+    unsigned char *buf, char *packet, unsigned long answ_addr)
+{
+    int datagram_len = sizeof(struct DNS_HEADER);
+    cJSON *j_queries_arr;
+    unsigned char *q_dns;
+    unsigned short q_dns_len;
+    unsigned char *a_dns;
+    unsigned short transaction;
+
+    cJSON *datagram_json = cJSON_Parse(packet);
+    if (datagram_json == NULL)
+    {
+        fprintf(stderr, "build_response_datagram:cJSON_Parse packet error\n");
+        return 0;
+    }
+
+    if (!get_j_short(&transaction, "transaction", datagram_json))
+    {
+        fprintf(stderr, "build_response_datagram:get_j_short 'transaction' error\n");
+        cJSON_Delete(datagram_json);
+        return 0;
+    }
+
+    build_resp_header(buf, transaction, answ_addr);
+
+    j_queries_arr = cJSON_GetObjectItemCaseSensitive(datagram_json, LIST_QUERIES_KEY);
+    if (j_queries_arr == NULL || (!cJSON_IsArray(j_queries_arr)))
+    {
+        fprintf(stderr, "build_response_datagram:j_queries_arr packet error\n");
+        cJSON_Delete(datagram_json);
+        return 0;
+    }
+
+    q_dns = buf + sizeof(struct DNS_HEADER);
+
+    q_dns_len = json_to_question(q_dns, j_queries_arr);
+    if (q_dns_len == 0)
+    {
+        fprintf(stderr, "build_response_datagram:question dns length = 0\n");
+        cJSON_Delete(datagram_json);
+        return 0;
+    }
+
+    datagram_len += q_dns_len;
+
+    if(answ_addr != 0)
+    {
+        a_dns = q_dns + q_dns_len;
+        datagram_len += build_answer_dns(a_dns, answ_addr);
+    }
+
+    cJSON_Delete(datagram_json);
+
+    return datagram_len;
 }

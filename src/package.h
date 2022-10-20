@@ -30,4 +30,10 @@ bool response_to_json(
     char *buf, unsigned long out_host, unsigned short out_port,
     unsigned short out_transaction, char *message);
 
+int build_response_datagram(
+    unsigned char *buf, char *packet, unsigned long answ_addr);
+
+bool build_response_packet(
+    char *json_str_buf, unsigned char *datagram_resp_buf, int datagram_len, char *packet);
+
 #endif /* #ifndef PACKAGE_H */
