@@ -4,6 +4,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include "server.h"
+#include "conf.h"
 
 #include <sys/types.h>
 #include <netinet/in.h>
@@ -51,8 +52,9 @@ void req_handler(char *buf, int len)
     }
 }
 
-int init_server(void *t)
+int init_server(void *cnf)
 {
+    MainConf *serv_conf = (MainConf*)cnf;
     struct sockaddr_in s_in_addr;
     struct sockaddr_in s_out_addr;
     int slen = sizeof(s_out_addr);
@@ -69,15 +71,16 @@ int init_server(void *t)
     PkgContext pkg;
     redisContext *srg;
 
-    struct storage strg;
-    strg.host = "localhost";
-    strg.port = 6379;
-
     char buf[BUFLEN] = {0};
     char message[RESPONSE_PACKET_BUF_SIZE];
 
     unsigned long out_host;
     unsigned short out_port;
+
+    if(!init_srorage(&srg, serv_conf->storage_host, serv_conf->storage_port))
+    {
+        thrd_exit(1);
+    }
 
     // create UDP socket
     sd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -107,9 +110,13 @@ int init_server(void *t)
     memset((char *)&s_in_addr, 0, sizeof(s_in_addr));
 
     s_in_addr.sin_family = AF_INET;
-    s_in_addr.sin_port = htons(PORT);
+    s_in_addr.sin_port = htons(serv_conf->listen_port);
 
-    s_in_addr.sin_addr.s_addr = htonl(0xC0A86408); //htonl(INADDR_ANY);
+    if (inet_aton(serv_conf->listen_host, &s_in_addr.sin_addr) == 0)
+    {
+        perror("Server inet_aton() failed\n");
+        return 0;
+    }
 
     result = bind(sd, (struct sockaddr *)&s_in_addr, sizeof(s_in_addr));
 
@@ -124,8 +131,6 @@ int init_server(void *t)
     fds[0].events = POLLIN;
 
     timeout = (10);
-
-    init_srorage(&srg, &strg);
 
     while (1)
     {

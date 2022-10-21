@@ -1,4 +1,5 @@
 #include "client.h"
+#include "conf.h"
 #include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
@@ -24,8 +25,9 @@
 #define RECVFROM_TIMEOUT_MS (60 * 1000)
 
 
-int init_client(void *t)
+int init_client(void *cnf)
 {
+    MainConf *client_conf = (MainConf*)cnf;
     struct sockaddr_in s_in_addr;
     struct sockaddr_in s_out_addr;
     int slen = sizeof(s_out_addr);
@@ -46,12 +48,13 @@ int init_client(void *t)
     unsigned short port;
     unsigned short transaction;
 
-    struct storage strg;
-    strg.host = "localhost";
-    strg.port = 6379;
-
     unsigned char buf[RESPONSE_PACKET_BUF_SIZE];
     char message[RESPONSE_PACKET_BUF_SIZE];
+
+    if(!init_srorage(&srg, client_conf->storage_host, client_conf->storage_port))
+    {
+        thrd_exit(1);
+    }
 
     // create UDP socket
     sd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
@@ -81,9 +84,9 @@ int init_client(void *t)
     memset((char *)&s_out_addr, 0, sizeof(s_out_addr));
 
     s_out_addr.sin_family = AF_INET;
-    s_out_addr.sin_port = htons(PORT);
+    s_out_addr.sin_port = htons(client_conf->upstream_dns_port);
 
-    if (inet_aton(SERVER, &s_out_addr.sin_addr) == 0)
+    if (inet_aton(client_conf->upstream_dns_host, &s_out_addr.sin_addr) == 0)
     {
         perror("inet_aton() failed\n");
         close(sd);
@@ -105,8 +108,6 @@ int init_client(void *t)
     fds[0].events = POLLIN;
 
     timeout = RECVFROM_TIMEOUT_MS;
-
-    init_srorage(&srg, &strg);
 
     while (1)
     {

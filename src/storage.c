@@ -1,28 +1,28 @@
 #include "storage.h"
 #include <stdio.h>
 
-void init_srorage(redisContext **context, struct storage *conf)
+bool init_srorage(
+    redisContext **context, char *storage_host,  int storage_port)
 {
     redisReply *reply;
     redisContext *cntxt;
 
-    printf("Storage config %s:%u\n", conf->host, conf->port);
+    printf("Storage config %s:%u\n", storage_host, storage_port);
 
-    cntxt = redisConnect(conf->host, conf->port);
+    cntxt = redisConnect(storage_host, storage_port);
 
     if (cntxt == NULL || cntxt->err)
     {
         if (cntxt)
         {
             printf("Storage Error: %s\n", cntxt->errstr);
-            // handle error
         }
         else
         {
             printf("Can't allocate redis context\n");
         }
 
-        return;
+        return false;
     }
 
     reply = redisCommand(cntxt, "PING");
@@ -35,6 +35,7 @@ void init_srorage(redisContext **context, struct storage *conf)
     if(reply->type != REDIS_REPLY_STATUS)
     {
         printf("Storage Error: %s\n", cntxt->errstr);
+        return false;
     }else
     {
         printf("Storage PING was %s\n", reply->str);
@@ -43,6 +44,8 @@ void init_srorage(redisContext **context, struct storage *conf)
     freeReplyObject(reply);
 
     *context = cntxt;
+
+    return true;
 }
 
 void write_buffer(redisContext *context, const char *key, char *value)

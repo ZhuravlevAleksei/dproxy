@@ -8,13 +8,9 @@
 #define SERVER_COMM_BUFFER_IN "server:resp"
 #define CLIENT_COMM_BUFFER_IN "client:req"
 
-struct storage
-{
-    const char *host;
-    unsigned short port;
-};
+bool init_srorage(
+    redisContext **context, char *storage_host,  int storage_port);
 
-void init_srorage(redisContext **context, struct storage *conf);
 void write_buffer(redisContext *context, const char *key, char *value);
 void read_buffer(redisContext *context, const char *key, char *value);
 void write_set(redisContext *context, const char *collection, char *value);

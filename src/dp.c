@@ -1,6 +1,6 @@
 #include "dp.h"
-#include "conf.h"
 #include "storage.h"
+#include "conf.h"
 #include "server.h"
 #include "client.h"
 #include <threads.h>
@@ -14,19 +14,37 @@
 #include <arpa/inet.h>
 
 
+unsigned long answer_addr_init(char *addr_str)
+{
+    struct sockaddr_in s_out_addr;
+    unsigned long answ_addr = 0;
+
+    memset((char *)&s_out_addr, 0, sizeof(s_out_addr));
+
+    if (inet_aton(addr_str, &s_out_addr.sin_addr) == 0)
+    {
+        perror("inet_aton() failed\n");
+        return 0;
+    }
+    else
+    {
+        answ_addr = s_out_addr.sin_addr.s_addr;
+    }
+
+    return answ_addr;
+}
+
+
 int main(int argc, char **argv)
 {
     struct MainOpt opt;
-    struct conf cnf;
-    struct storage strg;
-    unsigned short i;
+    static MainConf cnf;
     thrd_t thread_servr_ID;
     thrd_t thread_client_ID_0;
     thrd_t thread_client_ID_1;
     thrd_t thread_client_ID_2;    
     redisContext *srg;
     char value[RESPONSE_PACKET_BUF_SIZE];
-    int recv_len;
     unsigned char names_len;
     char *name_list;
     unsigned char n;
@@ -35,36 +53,31 @@ int main(int argc, char **argv)
     int datagram_len;
     char *json_str_buf;
 
-    struct sockaddr_in s_out_addr;
-
-    strg.host = "localhost";
-    strg.port = 6379;
-
     get_main_options(&opt);
 
-    init_srorage(&srg, &strg);
-
-    open_conf(&cnf, opt.fname, srg);
-
-    memset((char *)&s_out_addr, 0, sizeof(s_out_addr));
-
-    if (inet_aton("68.183.241.41", &s_out_addr.sin_addr) == 0)
+    if(!open_conf(&cnf, opt.config_file_name))
     {
-        perror("inet_aton() failed\n");
-        answ_addr = 0;
+        free_conf(&cnf);
+        return 1;
     }
-    else
+
+    answ_addr = answer_addr_init(cnf.answ_addr);
+
+    if(!init_srorage(&srg, cnf.storage_host, cnf.storage_port))
     {
-        answ_addr = s_out_addr.sin_addr.s_addr;
+        free_conf(&cnf);
+        return 1;
     }
-    
-    if(thrd_success != thrd_create(&thread_servr_ID, init_server, NULL))
+
+    open_blacklist(srg, opt.blacklist_file_name);
+
+    if(thrd_success != thrd_create(&thread_servr_ID, init_server, &cnf))
     {
         printf("Thread init_server start Error\n");
         return 1;
     }
 
-    if(thrd_success != thrd_create(&thread_client_ID_0, init_client, NULL))
+    if(thrd_success != thrd_create(&thread_client_ID_0, init_client, &cnf))
     {
         printf("Thread init_client 0 start Error\n");
         return 1;
@@ -118,5 +131,6 @@ int main(int argc, char **argv)
     thrd_join(thread_client_ID_0, NULL);
     thrd_join(thread_client_ID_1, NULL);
     thrd_join(thread_client_ID_2, NULL);
+    free_conf(&cnf);
     return 0;
 }

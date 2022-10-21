@@ -13,7 +13,7 @@
 
 #define NS_ANSWER_TTL 60
 #define NS_ANSWER_NAME_LOCATION 0xC00C
-#define NS_ANSWER_LINGTH 16
+#define NS_ANSWER_LENGTH 16
 
 static const char *query_json_keys[] = {
     "flags",
@@ -572,7 +572,7 @@ int build_answer_dns(unsigned char *buf, unsigned long addr)
 
     *((unsigned long*)(buf + 12)) = addr;
 
-    return NS_ANSWER_LINGTH;
+    return NS_ANSWER_LENGTH;
 }
 
 void build_resp_header(
