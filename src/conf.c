@@ -16,8 +16,8 @@ static yaml_parser_t parser;
 
 void get_main_options(struct MainOpt *options)
 {
-    options->config_file_name = "server.yml";
-    options->blacklist_file_name = "blacklist.yml";
+    options->config_file_name = "./conf/server.yml";
+    options->blacklist_file_name = "./conf/blacklist.yml";
 }
 
 bool block_search(yaml_token_t *token, const char *name)
