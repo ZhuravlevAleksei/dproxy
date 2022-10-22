@@ -40,9 +40,7 @@ int main(int argc, char **argv)
     struct MainOpt opt;
     static MainConf cnf;
     thrd_t thread_servr_ID;
-    thrd_t thread_client_ID_0;
-    thrd_t thread_client_ID_1;
-    thrd_t thread_client_ID_2;    
+    thrd_t *clients_threads_arr;   
     redisContext *srg;
     char value[RESPONSE_PACKET_BUF_SIZE];
     unsigned char names_len;
@@ -77,23 +75,17 @@ int main(int argc, char **argv)
         return 1;
     }
 
-    if(thrd_success != thrd_create(&thread_client_ID_0, init_client, &cnf))
+    clients_threads_arr = malloc(cnf.clients_number * sizeof(thrd_t));
+
+    for(n = 0; n < cnf.clients_number; n++)
     {
-        printf("Thread init_client 0 start Error\n");
-        return 1;
+        if(thrd_create((clients_threads_arr + n), init_client, &cnf) == thrd_success)
+        {
+            continue;
+        }
+
+        printf("Thread init_client %d start Error\n", n);
     }
-
-    // if(thrd_success != thrd_create(&thread_client_ID_1, init_client, NULL))
-    // {
-    //     printf("Thread init_client 1 start Error\n");
-    //     return 1;
-    // }
-
-    // if(thrd_success != thrd_create(&thread_client_ID_2, init_client, NULL))
-    // {
-    //     printf("Thread init_client 2 start Error\n");
-    //     return 1;
-    // }
 
     while(true)
     {
@@ -127,10 +119,14 @@ int main(int argc, char **argv)
         clear_filter();
     }
 
+
+    for(n = 0; n < cnf.clients_number; n++)
+    {
+        thrd_join(*(clients_threads_arr + n), NULL);
+    }
+
     thrd_join(thread_servr_ID, NULL);
-    thrd_join(thread_client_ID_0, NULL);
-    thrd_join(thread_client_ID_1, NULL);
-    thrd_join(thread_client_ID_2, NULL);
+
     free_conf(&cnf);
     return 0;
 }
