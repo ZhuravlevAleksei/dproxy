@@ -41,7 +41,7 @@ bool block_search(yaml_token_t *token, const char *name)
                 break;
 
             default:
-                
+                break;
 
         }
     } while (((*token).type != YAML_STREAM_END_TOKEN) && ((*token).type != YAML_NO_TOKEN));
@@ -75,7 +75,7 @@ bool key_search(yaml_token_t *token, const char *name)
                 break;
 
             default:
-                
+                break;
         }
     } while (((*token).type != YAML_STREAM_END_TOKEN) && ((*token).type != YAML_NO_TOKEN));
 
@@ -98,8 +98,7 @@ bool get_value(yaml_token_t *token, char *value)
                 return true;
 
             default:
-                
-
+                break;
         }
     } while (((*token).type != YAML_STREAM_END_TOKEN) && ((*token).type != YAML_NO_TOKEN));
 

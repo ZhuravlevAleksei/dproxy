@@ -35,5 +35,5 @@ endforeach()
 
 
 add_executable(dp ${SOURCES})
-target_link_libraries(dp PUBLIC yaml hiredis resolv cjson onig)
+target_link_libraries(dp PUBLIC yaml hiredis resolv cjson onig pthread)
 
