@@ -1,15 +1,9 @@
 #include "package.h"
-
-#include <arpa/inet.h>
-// #include <netinet/in.h>
+#include "logger.h"
 #include <unistd.h>
-
 #include <resolv.h>
-
 #include <string.h>
-#include <stdio.h>
 #include <stdlib.h>
-#include <stdbool.h>
 
 #define NS_ANSWER_TTL 60
 #define NS_ANSWER_NAME_LOCATION 0xC00C
@@ -32,9 +26,16 @@ typedef enum
     ns_additional = 10
 } NsSectDisp;
 
+static struct timespec *lock_time;
+
 bool str_to_register(unsigned short *reg, const cJSON *json, const char *key);
 
-void init_package(PkgContext *context)
+void init_package(struct timespec *l_time)
+{
+    lock_time = l_time;;
+}
+
+void create_package(PkgContext *context)
 {
     context->datagram = cJSON_CreateObject();
 }
@@ -52,7 +53,7 @@ void arithmetic_to_json(cJSON *j_obj, const char *key, unsigned long long value)
 
     if (j_number == NULL)
     {
-        printf("cJSON_CreateNumber\n");
+        error_log(lock_time, "cJSON_CreateNumber == NULL\n");
         return;
     }
 
@@ -67,7 +68,7 @@ cJSON *create_queries_json(PkgContext *context)
 
     if (j_arr == NULL)
     {
-        printf("cJSON_CreateArray\n");
+        error_log(lock_time, "cJSON_CreateArray == NULL\n");
         return j_arr;
     }
 
@@ -84,7 +85,7 @@ void create_string_json(cJSON *j_obj, const char *key, const char *value)
 
     if (str == NULL)
     {
-        printf("cJSON_CreateString\n");
+        error_log(lock_time, "cJSON_CreateString == NULL\n");
         return;
     }
 
@@ -103,7 +104,7 @@ unsigned short questions_to_json(cJSON *j_arr, unsigned short q_number, ns_rr *r
 
     if (j_question == NULL)
     {
-        printf("questions_to_json error\n");
+        error_log(lock_time, "questions_to_json == NULL\n");
         return byte_counter;
     }
 
@@ -132,7 +133,7 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
 
     if (context->datagram == NULL)
     {
-        printf("cJSON_CreateObject error\n");
+        error_log(lock_time, "cJSON_CreateObject == NULL\n");
         return;
     }
 
@@ -143,7 +144,7 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
 
     if (result == -1)
     {
-        printf("ns_initparse");
+        error_log(lock_time, "ns_initparse\n");
         return;
     }
 
@@ -165,7 +166,7 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
 
         if (result < 0)
         {
-            printf("ns_parserr error");
+            error_log(lock_time, "ns_parserr\n");
             return;
         }
 
@@ -196,7 +197,7 @@ void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, 
 
         if (cJSON_AddStringToObject(context->datagram, "add_section", add_section) == NULL)
         {
-            printf("Additioanal section error");
+            error_log(lock_time, "Additioanal section error\n");
             free(add_section);
             return;
         }
@@ -265,7 +266,7 @@ unsigned short json_to_question(unsigned char *qinfo, const cJSON *j_info_array)
 
     if ((j_info == NULL) || (!cJSON_IsString(j_info)))
     {
-        fprintf(stderr, "json_to_question:cJSON_GetArrayItem error: 'name'\n");
+        error_log(lock_time, "json_to_question:cJSON_GetArrayItem error: 'name'\n");
         return 0;
     }
 
@@ -278,7 +279,7 @@ unsigned short json_to_question(unsigned char *qinfo, const cJSON *j_info_array)
 
     if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
     {
-        fprintf(stderr, "str_to_register error: 'type'\n");
+        error_log(lock_time, "str_to_register error: 'type'\n");
         return 0;
     }
     *((unsigned short *)qinfo) = htons(j_info->valueint);
@@ -289,7 +290,7 @@ unsigned short json_to_question(unsigned char *qinfo, const cJSON *j_info_array)
 
     if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
     {
-        fprintf(stderr, "str_to_register error: 'class'\n");
+        error_log(lock_time, "str_to_register error: 'class'\n");
         return 0;
     }
     *((unsigned short *)qinfo) = htons(j_info->valueint);
@@ -329,7 +330,7 @@ bool json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf
         const char *error_ptr = cJSON_GetErrorPtr();
         if (error_ptr != NULL)
         {
-            fprintf(stderr, "Error before: %s\n", error_ptr);
+            error_log(lock_time, "Error before: %s\n", error_ptr);
         }
         return false;
     }
@@ -344,7 +345,7 @@ bool json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf
     {
         if (!str_to_register(&tmp, datagram_json, query_json_keys[i]))
         {
-            fprintf(stderr, "str_to_register error: '%s'\n", query_json_keys[i]);
+            error_log(lock_time, "str_to_register error: '%s'\n", query_json_keys[i]);
             *res_len = 0;
             cJSON_Delete(datagram_json);
             return false;
@@ -506,7 +507,7 @@ bool get_j_long(unsigned long *value, const char *key, cJSON *datagram_json)
 
     if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
     {
-        fprintf(stderr, "get_j_long error: '%s'\n", key);
+        error_log(lock_time, "get_j_long error: '%s'\n", key);
         return false;
     }
     *value = j_info->valuedouble;
@@ -522,7 +523,7 @@ bool get_j_short(unsigned short *value, const char *key, cJSON *datagram_json)
 
     if ((j_info == NULL) || (!cJSON_IsNumber(j_info)))
     {
-        fprintf(stderr, "get_j_short error: '%s'\n", key);
+        error_log(lock_time, "get_j_short error: '%s'\n", key);
         return false;
     }
     *value = j_info->valueint;
@@ -620,27 +621,27 @@ bool build_response_packet(
     cJSON *datagram_json = cJSON_Parse(packet);
     if (datagram_json == NULL)
     {
-        fprintf(stderr, "build_response_packet:cJSON_Parse packet error\n");
+        error_log(lock_time, "build_response_packet:cJSON_Parse packet error\n");
         return false;
     }
 
     if (!get_j_long(&resp_addr, "addr", datagram_json))
     {
-        fprintf(stderr, "build_response_packet:get_j_long 'addr' error\n");
+        error_log(lock_time, "build_response_packet:get_j_long 'addr' error\n");
         cJSON_Delete(datagram_json);
         return false;
     }
 
     if (!get_j_short(&resp_port, "port", datagram_json))
     {
-        fprintf(stderr, "build_response_packet:get_j_short 'port' error\n");
+        error_log(lock_time, "build_response_packet:get_j_short 'port' error\n");
         cJSON_Delete(datagram_json);
         return false;
     }
 
     if (!get_j_short(&transaction, "transaction", datagram_json))
     {
-        fprintf(stderr, "build_response_packet:get_j_short 'transaction' error\n");
+        error_log(lock_time, "build_response_packet:get_j_short 'transaction' error\n");
         cJSON_Delete(datagram_json);
         return false;
     }
@@ -650,7 +651,8 @@ bool build_response_packet(
     message = calloc(((datagram_len * 2) + 1), sizeof(char));
     if (message == NULL)
     {
-        fprintf(stderr, "filter response:calloc(%u) error\n", datagram_len);
+        error_log(lock_time, "filter response:calloc(%u) error\n", datagram_len);
+        free(message);
         return false;
     }
     // There's two symbols per byte ((datagram_len * 2) + 1)
@@ -675,13 +677,13 @@ int build_response_datagram(
     cJSON *datagram_json = cJSON_Parse(packet);
     if (datagram_json == NULL)
     {
-        fprintf(stderr, "build_response_datagram:cJSON_Parse packet error\n");
+        error_log(lock_time, "build_response_datagram:cJSON_Parse packet error\n");
         return 0;
     }
 
     if (!get_j_short(&transaction, "transaction", datagram_json))
     {
-        fprintf(stderr, "build_response_datagram:get_j_short 'transaction' error\n");
+        error_log(lock_time, "build_response_datagram:get_j_short 'transaction' error\n");
         cJSON_Delete(datagram_json);
         return 0;
     }
@@ -691,7 +693,7 @@ int build_response_datagram(
     j_queries_arr = cJSON_GetObjectItemCaseSensitive(datagram_json, LIST_QUERIES_KEY);
     if (j_queries_arr == NULL || (!cJSON_IsArray(j_queries_arr)))
     {
-        fprintf(stderr, "build_response_datagram:j_queries_arr packet error\n");
+        error_log(lock_time, "build_response_datagram:j_queries_arr packet error\n");
         cJSON_Delete(datagram_json);
         return 0;
     }
@@ -701,7 +703,7 @@ int build_response_datagram(
     q_dns_len = json_to_question(q_dns, j_queries_arr);
     if (q_dns_len == 0)
     {
-        fprintf(stderr, "build_response_datagram:question dns length = 0\n");
+        error_log(lock_time, "build_response_datagram:question dns length = 0\n");
         cJSON_Delete(datagram_json);
         return 0;
     }

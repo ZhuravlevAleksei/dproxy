@@ -14,7 +14,8 @@ typedef struct
     char *json_dump;
 }PkgContext;
 
-void init_package(PkgContext *context);
+void init_package(struct timespec *l_time);
+void create_package(PkgContext *context);
 void datagram_to_json(PkgContext *context, struct sockaddr_in *addr, char *buf, int buf_len);
 void delete_package(PkgContext *context);
 bool json_to_datagram(char *packet, unsigned char *resolv, int *res_len, int buf_len);

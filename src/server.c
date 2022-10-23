@@ -1,56 +1,19 @@
-#include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #include "server.h"
 #include "conf.h"
-
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <arpa/nameser.h>
-#include <resolv.h>
-
 #include "package.h"
 #include "storage.h"
 #include <threads.h>
 #include <sys/poll.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
+#include "logger.h"
 
-#define BUFLEN 512 // Max length of buffer
-#define PORT 8888  // The port on which to listen for incoming data
+#define BUFLEN 512
 
-void die(char *s)
-{
-    perror(s);
-}
-
-void req_handler(char *buf, int len)
-{
-    ns_msg msg;
-    ns_sect section;
-    ns_rr rr;
-    int rrmax;
-    int i;
-    int result;
-
-    result = ns_initparse(buf, len, &msg);
-
-    if (result == -1)
-    {
-        die("ns_initparse");
-    }
-
-    rrmax = ns_msg_count(msg, ns_s_qd);
-
-    for (i = 0; i < rrmax; i++)
-    {
-        result = ns_parserr(&msg, ns_s_qd, i, &rr);
-        printf("%s\n", rr.name);
-    }
-}
 
 int init_server(void *cnf)
 {
@@ -58,7 +21,7 @@ int init_server(void *cnf)
     struct sockaddr_in s_in_addr;
     struct sockaddr_in s_out_addr;
     int slen = sizeof(s_out_addr);
-    int out_addr_len;
+    int out_addr_len = sizeof(s_out_addr);
 
     int sd;
     int on = 1;
@@ -70,6 +33,7 @@ int init_server(void *cnf)
     char *json_dump;
     PkgContext pkg;
     redisContext *srg;
+    struct timespec lock_time;
 
     char buf[BUFLEN] = {0};
     char message[RESPONSE_PACKET_BUF_SIZE];
@@ -77,17 +41,22 @@ int init_server(void *cnf)
     unsigned long out_host;
     unsigned short out_port;
 
-    if(!init_srorage(&srg, serv_conf->storage_host, serv_conf->storage_port))
+    lock_time_init(&lock_time, SERVER_LOG_TIMEOUT);
+
+    if(!init_srorage(&srg, serv_conf->storage_host, serv_conf->storage_port, &lock_time))
     {
+        error_log(&lock_time, "Server init_srorage");
         thrd_exit(1);
     }
+
+    init_package(&lock_time);
 
     // create UDP socket
     sd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
     if (sd == -1)
     {
-        die("cteate socket error");
+        error_log(&lock_time, "Server cteate socket");
         thrd_exit(1);
     }
 
@@ -95,7 +64,7 @@ int init_server(void *cnf)
 
     if (result == -1)
     {
-        die("setsockopt error");
+        error_log(&lock_time, "Server set socket options");
         thrd_exit(1);
     }
 
@@ -103,9 +72,11 @@ int init_server(void *cnf)
 
     if (result == -1)
     {
-        die("ioctl error");
+        error_log(&lock_time, "Server ioctl");
         thrd_exit(1);
     }
+
+    memset((char *)&s_out_addr, 0, sizeof(s_out_addr));
 
     memset((char *)&s_in_addr, 0, sizeof(s_in_addr));
 
@@ -114,7 +85,7 @@ int init_server(void *cnf)
 
     if (inet_aton(serv_conf->listen_host, &s_in_addr.sin_addr) == 0)
     {
-        perror("Server inet_aton() failed\n");
+        error_log(&lock_time, "Server inet_aton() failed");
         return 0;
     }
 
@@ -122,7 +93,7 @@ int init_server(void *cnf)
 
     if (result == -1)
     {
-        die("bind error");
+        error_log(&lock_time, "Server bind");
         thrd_exit(1);
     }
 
@@ -140,7 +111,7 @@ int init_server(void *cnf)
 
         if (result == -1)
         {
-            die("poll error");
+            error_log(&lock_time, "Server poll");
             close(sd);
             thrd_exit(1);
         }
@@ -151,16 +122,20 @@ int init_server(void *cnf)
 
             if (recv_len == -1)
             {
-                die("recv error");
+                error_log(&lock_time, "Server recvfrom");
                 close(sd);
                 thrd_exit(1);
             }
 
-            init_package(&pkg);
+            create_package(&pkg);
 
             datagram_to_json(&pkg, &s_out_addr, buf, recv_len);
 
-            write_buffer(srg, CLIENT_COMM_BUFFER_IN, pkg.json_dump);
+            if(!write_buffer(srg, CLIENT_COMM_BUFFER_IN, pkg.json_dump))
+            {
+                close(sd);
+                thrd_exit(0);
+            }
 
             delete_package(&pkg);
         }
@@ -190,7 +165,7 @@ int init_server(void *cnf)
 
             if (sendto(sd, buf, recv_len, 0, (struct sockaddr *)&s_out_addr, slen) == -1)
             {
-                perror("sendto error");
+                error_log(&lock_time, "Server sendto");
             }
         }
     }

@@ -1,4 +1,4 @@
-# dproxy:0.3.00
+# dproxy:0.3.10
 FROM redis:latest
 
 WORKDIR /dproxy
@@ -10,6 +10,7 @@ COPY ./oniguruma /dproxy/oniguruma
 COPY ./src /dproxy/src
 COPY ./CMakeLists.txt /dproxy/CMakeLists.txt
 COPY ./supervisord.conf /etc/supervisord.conf
+COPY ./start.sh /dproxy/start.sh
 
 RUN apt-get update -y \
     && apt-get install -y python3 \

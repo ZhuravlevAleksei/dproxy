@@ -1,5 +1,4 @@
 #include "conf.h"
-#include <stdio.h>
 #include <yaml.h>
 
 #define MAX_LEN_VALUE 256
@@ -247,7 +246,10 @@ bool open_blacklist(redisContext *srg, const char *fname)
 
     while(key_search(&token, NULL))
     {
-        write_set(srg, NS_COLLECTION_KEY, token.data.scalar.value);
+        if(!write_set(srg, NS_COLLECTION_KEY, token.data.scalar.value))
+        {
+            return false;
+        }
     }
 
     // fprintf(stderr, "There in not any key\n");

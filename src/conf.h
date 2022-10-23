@@ -3,6 +3,7 @@
 
 #include <stdio.h>
 #include <stdbool.h>
+#include <threads.h>
 #include "storage.h"
 
 #define NS_COLLECTION_KEY "ns"

@@ -1,27 +1,18 @@
 #include "client.h"
 #include "conf.h"
-#include <stdio.h>
 #include <string.h>
 #include <arpa/inet.h>
 #include <sys/socket.h>
 #include <unistd.h>
-
-#include <sys/types.h>
-#include <netinet/in.h>
-#include <netdb.h>
-#include <arpa/nameser.h>
-#include <resolv.h>
-
 #include "package.h"
 #include "storage.h"
 #include <threads.h>
 #include <sys/poll.h>
 #include <sys/time.h>
 #include <sys/ioctl.h>
+#include "logger.h"
 
-#define BUFLEN 512 // Max length of buffer
-#define SERVER "8.8.8.8"
-#define PORT 53 // The port on which to listen for incoming data
+#define BUFLEN 512
 #define RECVFROM_TIMEOUT_MS (60 * 1000)
 
 
@@ -50,18 +41,24 @@ int init_client(void *cnf)
 
     unsigned char buf[RESPONSE_PACKET_BUF_SIZE];
     char message[RESPONSE_PACKET_BUF_SIZE];
+    struct timespec lock_time;
 
-    if(!init_srorage(&srg, client_conf->storage_host, client_conf->storage_port))
+    lock_time_init(&lock_time, SERVER_LOG_TIMEOUT);
+
+    if(!init_srorage(&srg, client_conf->storage_host, client_conf->storage_port, &lock_time))
     {
+        error_log(&lock_time, "Client init_srorage");
         thrd_exit(1);
     }
+
+    init_package(&lock_time);
 
     // create UDP socket
     sd = socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
 
     if (sd == -1)
     {
-        perror("socket");
+        error_log(&lock_time, "Client cteate socket");
         thrd_exit(1);
     }
 
@@ -69,7 +66,7 @@ int init_client(void *cnf)
 
     if (result == -1)
     {
-        perror("setsockopt error");
+        error_log(&lock_time, "Client set socket options");
         thrd_exit(1);
     }
 
@@ -77,7 +74,7 @@ int init_client(void *cnf)
 
     if (result == -1)
     {
-        perror("ioctl error");
+        error_log(&lock_time, "Client ioctl");
         thrd_exit(1);
     }
 
@@ -88,7 +85,7 @@ int init_client(void *cnf)
 
     if (inet_aton(client_conf->upstream_dns_host, &s_out_addr.sin_addr) == 0)
     {
-        perror("inet_aton() failed\n");
+        error_log(&lock_time, "Client inet_aton() failed");
         close(sd);
         thrd_exit(1);
     }
@@ -99,7 +96,7 @@ int init_client(void *cnf)
 
     if (result == -1)
     {
-        perror("bind error");
+        error_log(&lock_time, "Client bind");
         thrd_exit(1);
     }
 
@@ -111,7 +108,11 @@ int init_client(void *cnf)
 
     while (1)
     {
-        read_buffer(srg, SERVER_COMM_BUFFER_OUT, message);
+        if(!read_buffer(srg, SERVER_COMM_BUFFER_OUT, message))
+        {
+            close(sd);
+            thrd_exit(0);
+        }
 
         memset(buf, 0, BUFLEN);
 
@@ -122,7 +123,7 @@ int init_client(void *cnf)
 
         if (sendto(sd, buf, recv_len, 0, (struct sockaddr *)&s_out_addr, slen) == -1)
         {
-            perror("sendto()");
+            error_log(&lock_time, "Client sendto()");
             close(sd);
             thrd_exit(1);
         }
@@ -133,7 +134,7 @@ int init_client(void *cnf)
 
         if (result == -1)
         {
-            perror("poll error");
+            error_log(&lock_time, "Client poll");
             close(sd);
             thrd_exit(1);
         }
@@ -144,7 +145,7 @@ int init_client(void *cnf)
 
             if (recv_len == -1)
             {
-                perror("recvfrom");
+                error_log(&lock_time, "Client recvfrom");
             }
 
             if (!json_get_addr(message, &addr, &port, &transaction))
@@ -163,11 +164,14 @@ int init_client(void *cnf)
 
             response_to_json(buf, addr, port, transaction, message);
 
-            write_buffer(srg, SERVER_COMM_BUFFER_IN, buf);
+            if(!write_buffer(srg, SERVER_COMM_BUFFER_IN, buf))
+            {
+                thrd_exit(1);
+            }
         }
         else
         {
-            printf("Packet was lost. Timeout:%u\n", RECVFROM_TIMEOUT_MS);
+            error_log(&lock_time, "Client Packet was lost. Timeout");
             continue;
         }
     }

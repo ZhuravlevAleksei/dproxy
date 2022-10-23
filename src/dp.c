@@ -1,4 +1,3 @@
-#include "dp.h"
 #include "storage.h"
 #include "conf.h"
 #include "server.h"
@@ -9,10 +8,11 @@
 #include "package.h"
 #include <stdlib.h>
 #include <arpa/nameser.h>
-
 #include <string.h>
 #include <arpa/inet.h>
+#include "logger.h"
 
+static struct timespec lock_time;
 
 unsigned long answer_addr_init(char *addr_str)
 {
@@ -23,7 +23,7 @@ unsigned long answer_addr_init(char *addr_str)
 
     if (inet_aton(addr_str, &s_out_addr.sin_addr) == 0)
     {
-        perror("inet_aton() failed\n");
+        error_log(&lock_time, "Main answ_addr inet_aton()");
         return 0;
     }
     else
@@ -51,6 +51,9 @@ int main(int argc, char **argv)
     int datagram_len;
     char *json_str_buf;
 
+    logger_init();
+    lock_time_init(&lock_time, MAIN_LOG_TIMEOUT);
+
     get_main_options(&opt);
 
     if(!open_conf(&cnf, opt.config_file_name))
@@ -61,17 +64,20 @@ int main(int argc, char **argv)
 
     answ_addr = answer_addr_init(cnf.answ_addr);
 
-    if(!init_srorage(&srg, cnf.storage_host, cnf.storage_port))
+    if(!init_srorage(&srg, cnf.storage_host, cnf.storage_port, &lock_time))
     {
         free_conf(&cnf);
         return 1;
     }
 
-    open_blacklist(srg, opt.blacklist_file_name);
+    if(!open_blacklist(srg, opt.blacklist_file_name))
+    {
+        goto panic;
+    }
 
     if(thrd_success != thrd_create(&thread_servr_ID, init_server, &cnf))
     {
-        printf("Thread init_server start Error\n");
+        error_log(&lock_time, "Thread init_server start");
         return 1;
     }
 
@@ -84,12 +90,15 @@ int main(int argc, char **argv)
             continue;
         }
 
-        printf("Thread init_client %d start Error\n", n);
+        error_log(&lock_time, "Thread init_client %d start\n", n);
     }
 
     while(true)
     {
-        read_buffer(srg, CLIENT_COMM_BUFFER_IN, value);
+        if(!read_buffer(srg, CLIENT_COMM_BUFFER_IN, value))
+        {
+            goto panic;
+        }
 
         names_len = get_names_list(&name_list, value);
 
@@ -97,7 +106,10 @@ int main(int argc, char **argv)
         {
             if(!check_in_set(srg, NS_COLLECTION_KEY, (name_list + n)))
             {
-                write_buffer(srg, SERVER_COMM_BUFFER_OUT, value);
+                if(!write_buffer(srg, SERVER_COMM_BUFFER_OUT, value))
+                {
+                    goto panic;
+                }
                 continue;
             }
 
@@ -109,7 +121,10 @@ int main(int argc, char **argv)
 
             if(build_response_packet(json_str_buf, datagram_resp_buf, datagram_len, value))
             {
-                write_buffer(srg, SERVER_COMM_BUFFER_IN, json_str_buf);
+                if(!write_buffer(srg, SERVER_COMM_BUFFER_IN, json_str_buf))
+                {
+                    goto panic;
+                }
             }
 
             free(datagram_resp_buf);
@@ -119,14 +134,17 @@ int main(int argc, char **argv)
         clear_filter();
     }
 
-
+    panic:
     for(n = 0; n < cnf.clients_number; n++)
     {
-        thrd_join(*(clients_threads_arr + n), NULL);
+        thrd_detach(*(clients_threads_arr + n));
     }
 
-    thrd_join(thread_servr_ID, NULL);
+    thrd_detach(thread_servr_ID);
+
+    free(clients_threads_arr);
 
     free_conf(&cnf);
-    return 0;
+    free(name_list);
+    return 1;
 }

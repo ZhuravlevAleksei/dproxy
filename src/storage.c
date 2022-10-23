@@ -1,25 +1,29 @@
 #include "storage.h"
+#include "logger.h"
 #include <stdio.h>
 
+static struct timespec *lock_time;
+
 bool init_srorage(
-    redisContext **context, char *storage_host,  int storage_port)
+    redisContext **context, char *storage_host,  int storage_port, struct timespec *l_time)
 {
     redisReply *reply;
     redisContext *cntxt;
+    lock_time = l_time;
 
-    printf("Storage config %s:%u\n", storage_host, storage_port);
-
+    info_log(lock_time, "Storage config %s:%u\n", storage_host, storage_port);
+    
     cntxt = redisConnect(storage_host, storage_port);
 
     if (cntxt == NULL || cntxt->err)
     {
         if (cntxt)
         {
-            printf("Storage Error: %s\n", cntxt->errstr);
+            error_log(lock_time, "Storage Error: %s\n", cntxt->errstr);
         }
         else
         {
-            printf("Can't allocate redis context\n");
+            error_log(lock_time, "Can't allocate redis context\n");
         }
 
         return false;
@@ -29,16 +33,16 @@ bool init_srorage(
 
     if(reply == NULL)
     {
-        printf("Storage Error: %s\n", cntxt->errstr);
+        error_log(lock_time, "Storage Error: %s\n", cntxt->errstr);
     }
 
     if(reply->type != REDIS_REPLY_STATUS)
     {
-        printf("Storage Error: %s\n", cntxt->errstr);
+        error_log(lock_time, "Storage Error: %s\n", cntxt->errstr);
         return false;
     }else
     {
-        printf("Storage PING was %s\n", reply->str);
+        info_log(lock_time, "Storage PING gets %s\n", reply->str);
     }
 
     freeReplyObject(reply);
@@ -48,33 +52,56 @@ bool init_srorage(
     return true;
 }
 
-void write_buffer(redisContext *context, const char *key, char *value)
+bool write_buffer(redisContext *context, const char *key, char *value)
 {
     redisReply *reply;
 
     reply = redisCommand(context, "LPUSH %s %s", key, value);
+
+    if(reply == NULL)
+    {
+        error_log(lock_time, "Storage redisCommand Error: reply == NULL\n");
+        return false;
+    }
+
     freeReplyObject(reply);
+    return true;
 }
 
-void write_set(redisContext *context, const char *collection, char *value)
+bool write_set(redisContext *context, const char *collection, char *value)
 {
     redisReply *reply;
 
     reply = redisCommand(context, "SADD %s %s", collection, value);
+
+    if(reply == NULL)
+    {
+        error_log(lock_time, "Storage redisCommand Error: reply == NULL\n");
+        return false;
+    }
+
     freeReplyObject(reply);
+    return true;
 }
 
-void read_buffer(redisContext *context, const char *key, char *value)
+bool read_buffer(redisContext *context, const char *key, char *value)
 {
     redisReply *reply;
 
     reply = redisCommand(context, "BLPOP %s 0", key);
+
+    if(reply == NULL)
+    {
+        error_log(lock_time, "Storage redisCommand Error: reply == NULL\n");
+        return false;
+    }
 
     if (reply->type == REDIS_REPLY_ARRAY) {
         sprintf(value, "%s", reply->element[1]->str);
     }
 
     freeReplyObject(reply);
+    return true;
 }
 
 bool read_buffer_non_blocking(redisContext *context, const char *key, char *value)
@@ -82,6 +109,12 @@ bool read_buffer_non_blocking(redisContext *context, const char *key, char *valu
     redisReply *reply;
 
     reply = redisCommand(context, "LLEN %s", key);
+
+    if(reply == NULL)
+    {
+        error_log(lock_time, "Storage redisCommand Error: reply == NULL\n");
+        return false;
+    }
 
     if(reply->integer == 0)
     {
@@ -91,6 +124,12 @@ bool read_buffer_non_blocking(redisContext *context, const char *key, char *valu
     freeReplyObject(reply);
 
     reply = redisCommand(context, "LPOP %s", key);
+
+    if(reply == NULL)
+    {
+        error_log(lock_time, "Storage redisCommand Error: reply == NULL\n");
+        return false;
+    }
 
     if (reply->type == REDIS_REPLY_STRING) {
         sprintf(value, "%s", reply->str);
@@ -106,6 +145,12 @@ bool check_in_set(redisContext *context, const char *collection, char *value)
     bool res;
 
     reply = redisCommand(context, "SISMEMBER %s %s", collection, value);
+
+    if(reply == NULL)
+    {
+        error_log(lock_time, "Storage redisCommand Error: reply == NULL\n");
+        return false;
+    }
 
     if(reply->integer == 1)
     {
