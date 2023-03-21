@@ -34,11 +34,14 @@ bool init_srorage(
     if(reply == NULL)
     {
         error_log(lock_time, "Storage Error: %s\n", cntxt->errstr);
+        return false;
     }
 
     if(reply->type != REDIS_REPLY_STATUS)
     {
         error_log(lock_time, "Storage Error: %s\n", cntxt->errstr);
+        freeReplyObject(reply);
+
         return false;
     }else
     {
