@@ -1,14 +1,15 @@
 #include "filter.h"
-#include <stdio.h>
-#include <string.h>
 #include "oniguruma.h"
-#include <cJSON.h>
 #include "package.h"
+#include <cJSON.h>
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+
 
 #define ARRAY_FILTER_KEY "queries"
 
-static cJSON *datagram_json;
+static cJSON* datagram_json;
 
 // void filter_test()
 // {
@@ -71,23 +72,20 @@ static cJSON *datagram_json;
 //     onig_end();
 // }
 
-unsigned char get_names_list(char **name_list, char *packet)
-{
+unsigned char get_names_list(char** name_list, char* packet) {
     unsigned char queries_array_len;
     unsigned char names_len = 0;
-    const char *error_ptr;
-    const cJSON *queries_arr = NULL;
-    const cJSON *query_ns = NULL;
-    cJSON *name;
+    const char* error_ptr;
+    const cJSON* queries_arr = NULL;
+    const cJSON* query_ns = NULL;
+    cJSON* name;
 
     datagram_json = cJSON_Parse(packet);
 
-    if(datagram_json == NULL)
-    {
+    if(datagram_json == NULL) {
         error_ptr = cJSON_GetErrorPtr();
 
-        if (error_ptr != NULL)
-        {
+        if(error_ptr != NULL) {
             printf("Error before: %s\n", error_ptr);
         }
 
@@ -100,13 +98,12 @@ unsigned char get_names_list(char **name_list, char *packet)
 
     *name_list = malloc(queries_array_len * sizeof(char));
 
-    cJSON_ArrayForEach(query_ns, queries_arr)
-    {
+    cJSON_ArrayForEach(query_ns, queries_arr) {
         name = cJSON_GetObjectItemCaseSensitive(query_ns, "name");
 
-        if (!cJSON_IsString(name))
-        {
-            continue;;
+        if(!cJSON_IsString(name)) {
+            continue;
+            ;
         }
 
         *(name_list + names_len) = name->valuestring;
@@ -117,7 +114,4 @@ unsigned char get_names_list(char **name_list, char *packet)
     return names_len;
 }
 
-void clear_filter()
-{
-    cJSON_Delete(datagram_json);
-}
+void clear_filter() { cJSON_Delete(datagram_json); }
